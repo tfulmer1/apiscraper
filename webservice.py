@@ -4,15 +4,17 @@ from apiFinder import APIFinder
 from apicall import APIWriter
 app = Flask(__name__)
 
+
 @app.route("/search")
 def search():
-    #(self, url=None, harDirectory=None, searchString=None, removeParams=False, count=1)
-    searchStr = request.args.get('search')
-    urlStr = request.args.get('url')
-    finder = APIFinder(url=urlStr, searchString=searchStr)
-    apiCalls = finder.start()
-    writer = APIWriter(apiCalls)
-    return writer.outputJSON()
+    # (self, url=None, harDirectory=None, search_string=None, remove_params=False, count=1)
+    search_str = request.args.get('search')
+    url_str = request.args.get('url')
+    finder = APIFinder(url=url_str, search_string=search_str)
+    api_calls = finder.start()
+    writer = APIWriter(api_calls)
+    return writer.output_json()
+
 
 @app.route("/crawl")
 def crawl():

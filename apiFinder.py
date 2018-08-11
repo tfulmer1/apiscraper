@@ -1,138 +1,149 @@
-import urllib
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse
 import sys
-import re
 import os
 from random import shuffle
 from bs4 import BeautifulSoup
 
-from apicall import APICall, APICallEncoder, APIWriter
+from apicall import APIWriter
 from harParser import HarParser
 from browser import Browser
 
+
 class APIFinder:
 
-	def __init__(self, url=None, harDirectory=None, searchString=None, removeParams=False, count=1, cookies=None):
-		self.url = url
-		self.harDirectory = harDirectory
-		self.searchString = searchString
-		self.removeParams = removeParams
-		self.count = count
-		self.browser = None
-		self.cookies = cookies
-		
-	def start(self):
-		if self.count > 1 and self.url is None:
-			print("Cannot provide page count with no URL given")
-			exit(1)
-		if self.removeParams and self.url is None:
-			print("WARNING: Must have Internet connection to remove unneeded parameters")
+    def __init__(self, url=None, har_directory=None, search_string=None, remove_params=False, count=1, cookies=None):
+        self.url = url
+        self.har_directory = har_directory
+        self.search_string = search_string
+        self.remove_params = remove_params
+        self.count = count
+        self.browser = None
+        self.cookies = cookies
 
-		#Scan for all APIs
-		if self.url:
-			os.makedirs(self.harDirectory,exist_ok=True)
-			self.deleteExistingHars()
-			self.browser = Browser("chromedriver/chromedriver", "browsermob-proxy-2.1.4/bin/browsermob-proxy", self.harDirectory, cookies=self.cookies)
-			if self.searchString is not None:
-				print("Searching URL "+self.url+" for string "+self.searchString)
-			#Move recursively through the site
-			apiCalls = self.crawlingScan(self.url)
-			
-		#Scan directory of har files
-		else:
-			print("Parsing existing directory of har files")
-			harParser = HarParser(self.harDirectory, self.searchString, self.removeParams)
-			apiCalls = harParser.parseMultipleHars()
+    def start(self):
+        if self.count > 1 and self.url is None:
+            print("Cannot provide page count with no URL given")
+            exit(1)
+        if self.remove_params and self.url is None:
+            print("WARNING: Must have Internet connection to remove unneeded parameters")
 
-		if self.browser is not None:
-			self.browser.close()
+        # Scan for all APIs
+        if self.url:
+            os.makedirs(self.har_directory, exist_ok=True)
+            self.delete_existing_hars()
+            self.browser = Browser("chromedriver/chromedriver",
+                                   "browsermob-proxy-2.1.4/bin/browsermob-proxy",
+                                   self.har_directory,
+                                   cookies=self.cookies
+                                   )
+            if self.search_string is not None:
+                print("Searching URL " + self.url + " for string " + self.search_string)
+            # Move recursively through the site
+            api_calls = self.crawling_scan(self.url)
 
-		return apiCalls
+        # Scan directory of har files
+        else:
+            print("Parsing existing directory of har files")
+            har_parser = HarParser(self.har_directory, self.search_string, self.remove_params)
+            api_calls = har_parser.parse_multiple_hars()
 
-	def openURL(self, url):
-		return self.browser.get(url) #load the url in Chrome
+        if self.browser is not None:
+            self.browser.close()
 
-	def getDomain(self, url):
-		return urlparse(url).netloc.lstrip('www.')
+        return api_calls
 
-	def isInternal(self, url, baseUrl):
-		if url.startswith("/"):
-			return baseUrl+url
-		if self.getDomain(baseUrl) == self.getDomain(url):
-			return url
-		return None
+    def open_url(self, url):
+        return self.browser.get(url)  # load the url in Chrome
 
+    @staticmethod
+    def get_domain(url):
+        return urlparse(url).netloc.lstrip('www.')
 
-	def findInternalURLsInText(self, text, currentUrl, allFoundURLs):
-		newUrls = []
-		regex = re.compile(r'(https?://[\w]+\.)(com|org|biz|net)((/[\w]+)+)(\.[a-z]{2,4})?(\?[\w]+=[\w]+)?((&[\w]+=[\w]+)+)?', re.ASCII)
+    def is_internal(self, url, base_url):
+        if url.startswith("/"):
+            return base_url + url
+        if self.get_domain(base_url) == self.get_domain(url):
+            return url
+        return None
 
-		matches = re.finditer(regex, text)
+    '''
+    @staticmethod
+    def find_internal_urls_in_text(text, current_url, all_found_urls):
+        regex = re.compile(
+            r'(https?://[\w]+\.)(com|org|biz|net)((/[\w]+)+)(\.[a-z]{2,4})?(\?[\w]+=[\w]+)?((&[\w]+=[\w]+)+)?',
+            re.ASCII
+        )
 
-		for match in matches:
-			print(str(match.group()))
+        matches = re.finditer(regex, text)
 
-	#Returns a list of all internal URLs on a page as long
-	#as they are either relative URLs or contain the current domain name
-	def findInternalURLs(self, bsObj, currentUrl, allFoundURLs):
-		newUrls = []
-		baseUrl = urlparse(currentUrl).scheme+"://"+urlparse(currentUrl).netloc
-		#Finds all links that begin with a "/"
-		for link in bsObj.findAll("a"):
-			if 'href' in link.attrs:
-				#baseUrl, urlInPage = parseUrl(link.attrs)
-				url = link.attrs['href']
-				#It's an internal URL and we haven't found it already
-				url = self.isInternal(url, baseUrl)
-				if url is not None and url not in newUrls and url not in allFoundURLs:
-					newUrls.append(url)
-					allFoundURLs.append(url)
-		return allFoundURLs, newUrls
+        for match in matches:
+            print(str(match.group()))
+    '''
 
+    # Returns a list of all internal URLs on a page as long
+    # as they are either relative URLs or contain the current domain name
+    def find_internal_urls(self, soup, current_url, all_found_urls):
+        new_urls = []
+        base_url = urlparse(current_url).scheme + "://" + urlparse(current_url).netloc
+        # Finds all links that begin with a "/"
+        for link in soup.findAll("a"):
+            if 'href' in link.attrs:
+                # baseUrl, urlInPage = parseUrl(link.attrs)
+                url = link.attrs['href']
+                # It's an internal URL and we haven't found it already
+                url = self.is_internal(url, base_url)
+                if url is not None and url not in new_urls and url not in all_found_urls:
+                    new_urls.append(url)
+                    all_found_urls.append(url)
+        return all_found_urls, new_urls
 
-	def getContentType(self,headers):
-		for header in headers:
-			if header["name"] == "Content-Type":
-				return header["value"]
+    @staticmethod
+    def get_content_type(headers):
+        for header in headers:
+            if header["name"] == "Content-Type":
+                return header["value"]
 
-	#Get rid of all the current har files
-	def deleteExistingHars(self):
-		files = os.listdir(self.harDirectory)
-		for singleFile in files:
-			if "har" in singleFile:
-				os.remove(self.harDirectory+"/"+singleFile)
+    # Get rid of all the current har files
+    def delete_existing_hars(self):
+        files = os.listdir(self.har_directory)
+        for singleFile in files:
+            if "har" in singleFile:
+                os.remove(self.har_directory + "/" + singleFile)
 
+    # Performs a recursive crawl of a site, searching for APIs
+    def crawling_scan(self, url, api_calls=None, all_found_urls=None):
+        if api_calls is None:
+            api_calls = []
+        if all_found_urls is None:
+            all_found_urls = []
+        self.count = self.count - 1
+        if self.count < 0:
+            return
 
-	#Performs a recursive crawl of a site, searching for APIs
-	def crawlingScan(self, url, apiCalls = [], allFoundURLs = []):
-		self.count = self.count - 1
-		if self.count < 0:
-			return
+        har_parser = HarParser(self.har_directory, search_string=self.search_string, remove_params=self.remove_params)
 
-		harParser = HarParser(self.harDirectory, searchString=self.searchString, removeParams=self.removeParams)
+        # If uncommented, will return as soon as a matching call is found
+        # if self.search_string is not None and len(apiCalls) > 0:
+        # 	return apiCalls
+        try:
+            print("Scanning URL: "+url)
+            html = self.open_url(url)
+            if html is not None:
+                soup = BeautifulSoup(html, "lxml")
 
-		#If uncommented, will return as soon as a matching call is found
-		#if self.searchString is not None and len(apiCalls) > 0:
-		#	return apiCalls
-		try:
-			print("Scanning URL: "+url)
-			html = self.openURL(url)
-			if html is not None:
-				bsObj = BeautifulSoup(html, "lxml")
+                har_obj = har_parser.get_single_har_file()
+                api_calls = har_parser.scan_har_file(har_obj, api_calls=api_calls)
 
-				harObj = harParser.getSingleHarFile()
-				apiCalls = harParser.scanHarfile(harObj, apiCalls=apiCalls)
+                all_found_urls, new_urls = self.find_internal_urls(soup, url, all_found_urls)
+                shuffle(new_urls)
 
-				allFoundURLs, newUrls = self.findInternalURLs(bsObj, url, allFoundURLs)
-				shuffle(newUrls)
-				
-				for newUrl in newUrls:
-					self.crawlingScan(newUrl, apiCalls, allFoundURLs)
-		
-		except (KeyboardInterrupt, SystemExit):
-			print("Stopping crawl")
-			self.browser.close()
-			apiWriter = APIWriter(apiCalls)
-			apiWriter.outputAPIs()
-			exit(1)
-		return apiCalls
+                for newUrl in new_urls:
+                    self.crawling_scan(newUrl, api_calls, all_found_urls)
+
+        except (KeyboardInterrupt, SystemExit):
+            print("Stopping crawl")
+            self.browser.close()
+            api_writer = APIWriter(api_calls)
+            api_writer.output_apis()
+            sys.exit(1)
+        return api_calls
